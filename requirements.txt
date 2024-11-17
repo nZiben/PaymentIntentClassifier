@@ -1,0 +1,3 @@
+pandas<2.0
+transformers==4.46.2
+textstat==0.7.4
