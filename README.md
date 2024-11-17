@@ -2,6 +2,43 @@
 
 ---
 
+## Структура Решения
+├── Dockerfile
+├── README.md
+├── data
+│   └── stratified_dataset_union_gpt_catboost.csv
+├── input_file.tsv
+├── models
+│   ├── .gitkeep
+│   └── automl_model.pkl
+├── notebooks
+│   ├── eda
+│   │   └── EDA.ipynb
+│   ├── labeling
+│   │   └── 4o_labeling.ipynb
+│   └── training
+│       ├── embedding_to_catboost_crossval.ipynb
+│       └── train_model_part_of_the_data.ipynb
+├── predict.py
+├── prediction_api.py
+├── requirements.txt
+└── src
+    └── .gitkeep
+
+## Запуск
+Для запуска проекта необходим работающий Docker:
+1. В корневой каталог проекта необходимо поместить тестовый файл: `input_file.tsv`
+2. Для сборки образа и его запуска используем:
+```bash
+docker build -t biv-hack .
+docker run -v ${PWD}:/app biv-hack
+```
+3. Во время работы модель логирует события в терминал
+4. В итоге вы получаете файл в кореновм каталоге
+
+(*) Также важное замечание! Если меняется тестовый файл, то образ необходимо ЗАНОВО собирать. Но время 
+сборки будет в разы меньше за счет сборки кэша.
+
 ## Обзор Решения
 
 Наш подход включает следующие ключевые компоненты:
