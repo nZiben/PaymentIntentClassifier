@@ -7,12 +7,12 @@ import torch
 from transformers import AutoTokenizer, AutoModel
 import textstat
 from tqdm.auto import tqdm
-tqdm.pandas()
+from pathlib import Path
 from lightautoml.automl.presets.tabular_presets import TabularAutoML, TabularUtilizedAutoML
 from lightautoml.tasks import Task
+tqdm.pandas()
 
 # Инициализация токенизатора и модели
-print("--> Инициализация модели")
 tokenizer = AutoTokenizer.from_pretrained("sergeyzh/rubert-tiny-turbo")
 model = AutoModel.from_pretrained("sergeyzh/rubert-tiny-turbo")
 
@@ -76,75 +76,91 @@ def extract_first_date(text):
 
     return None
 
-def extract_features(df, text_column):
-    # Preprocess text
-    df[text_column] = df[text_column].apply(preprocess_text)
-    # Extract contract numbers and replace them in the text
-
-    def replace_contract_numbers(text):
-        if not isinstance(text, str):
-            return text, False
-        contract_pattern = r'(\b\d{2,}-\d{4,}\b)'
-        match = re.search(contract_pattern, text)
-        if match:
-            return re.sub(contract_pattern, '[CONTRACT_NUMBER]', text), True
-        return text, False
-
-    df[text_column], has_contract_number = zip(
-        *df[text_column].progress_apply(replace_contract_numbers))
-
-    # Extract dates and replace them in the text
-    def replace_dates_and_extract(text):
-        if not isinstance(text, str):
-            return text, None
-        date_pattern = r'\b\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\b'
-        match = re.search(date_pattern, text)
-        if match:
-            extracted_date = extract_first_date(match.group())
-            text = re.sub(date_pattern, '[DATE]', text)
-            return text, extracted_date
-        return text, None
-
-    df[text_column], extracted_dates = zip(
-        *df[text_column].progress_apply(replace_dates_and_extract))
-
-    def get_embeddings(text: str):
-        inputs = tokenizer(text, return_tensors='pt',
-                           truncation=True, padding=True)
-        with torch.no_grad():
-            outputs = model(**inputs)
-        return outputs.last_hidden_state.mean(dim=1).squeeze().numpy()
-
     # Calculate days difference between extracted_date and the date column
-    def calculate_days_difference(extracted_date, reference_date):
-        if pd.isna(extracted_date) or pd.isna(reference_date):
-            return None
-        return (reference_date - extracted_date).days
+def calculate_days_difference(extracted_date, reference_date):
+    if pd.isna(extracted_date) or pd.isna(reference_date):
+        return None
+    return (reference_date - extracted_date).days
 
-    df['date'] = pd.to_datetime(df['date'])
-    df['date_difference'] = [
-        calculate_days_difference(extracted_date, reference_date)
-        for extracted_date, reference_date in zip(extracted_dates, df['date'])
-    ]
-    embeddings = df[text_column].progress_apply(get_embeddings)
 
-    # Expand embeddings into individual columns
-    embeddings_df = pd.DataFrame(embeddings.tolist(), index=df.index)
-    embeddings_df.columns = [f'embedding_{
-        i}' for i in range(embeddings_df.shape[1])]
+def replace_contract_numbers(text):
+    if not isinstance(text, str):
+        return text, False
+    contract_pattern = r'(\b\d{2,}-\d{4,}\b)'
+    match = re.search(contract_pattern, text)
+    if match:
+        return re.sub(contract_pattern, '[CONTRACT_NUMBER]', text), True
+    return text, False
 
-    # Count words in text
-    word_count = df[text_column].progress_apply(lambda x: len(x.split()))
+# Extract dates and replace them in the text
+def replace_dates_and_extract(text):
+    if not isinstance(text, str):
+        return text, None
+    date_pattern = r'\b\d{1,2}[./-]\d{1,2}[./-]\d{2,4}\b'
+    match = re.search(date_pattern, text)
+    if match:
+        extracted_date = extract_first_date(match.group())
+        text = re.sub(date_pattern, '[DATE]', text)
+        return text, extracted_date
+    return text, None
 
-    # Concatenate features back to the original DataFrame
-    df = pd.concat([df, pd.DataFrame({
-        'has_contract_number': has_contract_number,
-        'word_count': word_count
-    }), embeddings_df], axis=1)
-    df = df.drop(columns=[text_column])
-    return df
 
 # Функция для извлечения признаков из DataFrame
+def extract_features(df):
+    # Предобработка текста
+    def preprocess_text(text):
+        if not isinstance(text, str):
+            return ""
+        return text.lower()
+    df['Content'] = df['Content'].apply(preprocess_text)
+
+    # Замена номеров договоров на [CONTRACT_NUMBER]
+    def replace_contract_numbers(text):
+        if not isinstance(text, str):
+            return text
+        contract_pattern = r'\b\d{2,}-\d{4,}\b'
+        text = re.sub(contract_pattern, '[CONTRACT_NUMBER]', text)
+        return text
+    df['Content'] = df['Content'].apply(replace_contract_numbers)
+
+    # Замена дат на [DATE]
+    df["Date"], extracted_dates = zip(
+        *df["Date"].apply(replace_dates_and_extract))
+
+    df['Date'] = pd.to_datetime(df['Date'])
+    df['date_difference'] = [
+        calculate_days_difference(extracted_date, reference_date)
+        for extracted_date, reference_date in zip(extracted_dates, df['Date'])
+    ]
+
+    # Получение эмбеддингов
+    df['Embeddings'] = df['Content'].apply(get_embeddings)
+    embeddings = df['Embeddings'].tolist()
+    embeddings_df = pd.DataFrame(embeddings)
+    embeddings_df.columns = [f'embedding_{i}' for i in range(embeddings_df.shape[1])]
+    df = pd.concat([df.reset_index(drop=True), embeddings_df.reset_index(drop=True)], axis=1)
+    df = df.drop(columns=['Embeddings'])
+
+    # Получение текстовых характеристик
+    textstat_features = df['Content'].apply(get_textstat_features)
+    textstat_df = pd.DataFrame(textstat_features.tolist())
+    df = pd.concat([df.reset_index(drop=True), textstat_df.reset_index(drop=True)], axis=1)
+
+    # Вычисление наличия номера договора и количества слов
+    def has_contract_number(text):
+        if not isinstance(text, str):
+            return False
+        contract_pattern = r'\b\d{2,}-\d{4,}\b'
+        return bool(re.search(contract_pattern, text))
+
+    df['has_contract_number'] = df['Content'].apply(has_contract_number)
+    df['word_count'] = df['Content'].apply(lambda x: len(x.split()) if isinstance(x, str) else 0)
+
+    # Удаление столбца 'Content' если не нужен
+    df = df.drop(columns=['Content'])
+
+    return df
+
 # Загрузка данных из входного файла TSV без заголовков
 data = pd.read_csv('input_file.tsv', sep='\t', header=None, names=['ID', 'Date', 'Price', 'Content'])
 
@@ -156,15 +172,16 @@ data['Price'] = data['Price'].replace({',': '.', '-': '.'}, regex=True)
 data['Price'] = pd.to_numeric(data['Price'], errors='coerce')
 
 # Извлечение признаков
-data = extract_features(data, "Content")
+print("--> Генерация признаков")
+data = extract_features(data)
 
-print("--> Подгружаем модель")
 # Загрузка предобученной модели
+print("--> Загрузка модели")
 with open('models/automl_model.pkl', 'rb') as f:
     loaded_automl = pickle.load(f)
 
 # Предсказание
-print("--> Делаем предсказания")
+print("--> Предсказание")
 predictions = loaded_automl.predict(data)
 
 # Получение меток классов
@@ -179,4 +196,5 @@ predicted_classes = [label_class[idx] for idx in predicted_indices]
 output_df = pd.DataFrame({'ID': data['ID'], 'Category': predicted_classes})
 
 # Сохранение результатов в файл TSV без заголовков
-output_df.to_csv('/mnt/output_file.tsv', sep='\t', index=False, header=False)
+output_df.to_csv('output_file.tsv', sep='\t', index=False, header=False)
+print(f"--> Файл сохранен: {Path.cwd()}")
