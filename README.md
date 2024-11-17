@@ -3,6 +3,8 @@
 ---
 
 ## Структура Решения
+
+```
 ├── Dockerfile
 ├── README.md
 ├── data
@@ -24,6 +26,7 @@
 ├── requirements.txt
 └── src
     └── .gitkeep
+```
 
 ## Запуск
 Для запуска проекта необходим работающий Docker:
