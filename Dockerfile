@@ -42,9 +42,10 @@ RUN apt-get update && \
 
 # Копируем код проекта в контейнер
 WORKDIR /app
-COPY . .
 
-# Устанавливаем зависимости
+COPY ./requirements.txt .
 RUN pip install -r requirements.txt
+
+COPY . .
 
 CMD ["python3", "predict.py"]
