@@ -1,0 +1,15 @@
+FROM ghcr.io/astral-sh/uv:alpine3.20
+
+WORKDIR /app
+COPY . .
+
+RUN apk add gcc build-base freetype-dev libpng-dev openblas-dev python3
+
+RUN uv venv
+
+ENV PATH=".venv/bin:$PATH"
+
+RUN uv pip install lightautoml
+RUN uv pip install -r requirements.txt 
+
+CMD ["python3", "predict.py"]
