@@ -1,128 +1,140 @@
-# Классификация Назначения Платежей
+# Payment Purpose Classification
 
 ---
 
-## Структура репозитория
+## Repository Structure
 
 - `input_file.tsv`  
-  Входной файл для получения предсказания. ***Вам нужно заменить содержимое этого файла своими данными, сохранив его название.***
+  Input file for making predictions. ***You need to replace the contents of this file with your own data, keeping its name.***
 
 - `models/automl_model.pkl`  
-  Сохранённая модель, используемая для предсказаний.
+  Saved model used for making predictions.
 
 - `notebooks/`  
-  Содержит Jupyter Notebooks с анализом данных (EDA), разметкой, обучением и кросс-валидацией.
+  Contains Jupyter Notebooks for data analysis (EDA), labeling, training, and cross-validation.
 
 - `predict.py`  
-  Скрипт для запуска предсказаний модели.
+  Script to run model predictions.
 
 - `prediction_api.py`  
-  API для предоставления предсказаний на основе модели.
-
-## Запуск
-Для запуска проекта необходим работающий Docker:
-1. В корневой каталог проекта необходимо поместить тестовый файл: input_file.tsv **сохранив его название**.
-2. Для сборки образа и его запуска используем:
-```bash
-docker build -t biv-hack .
-docker run -v ${PWD}:/app biv-hack
-```
-3. Во время работы модель логирует события в терминал.
-4. В итоге вы получаете файл в корневом каталоге.
-
-(*) Также важное замечание! Если меняется тестовый файл, то образ необходимо заново собирать. Но время сборки будет в разы меньше за счет использования кэша.
-
-## Время сборки и запуска
-
-1. **Первая сборка Docker-образа**:  
-   - Занимает около **10 минут**.
-
-2. **Повторные пересборки**:  
-   - Благодаря использованию кэша, время сборки сокращается до **2 минут**.
-
-3. **Время инференса решения**:  
-   - Обработка 25 000 записей моделью занимает примерно **5 минут 40 секунд**.
-
-## Обзор Решения
-
-Наш подход включает следующие ключевые компоненты:
-
-**Оценка эмбеддингов**
-- Тестирование моделей из MTEB, выбор лучших по точности и скорости.
-
-**Предобработка текста**
-- Нормализация текста: приведение к нижнему регистру, замена дат и номеров на шаблоны.
-- Вычисление дополнительных признаков: читаемость текста, разница в датах.
-
-**Обучение модели CatBoost**
-- Классификация с использованием эмбеддингов, дат, сумм платежей и сгенерированных признаков.
-
-**Разметка данных с GPT-4o**
-- Добавлено 25 000 записей. Использованы только записи с совпадающими предсказаниями CatBoost и GPT-4o для повышения качества.
-
-**Блендинг и метамодель**
-- Блендинг моделей (логистическая регрессия, CatBoost) для повышения точности и устойчивости.
-
-**Оптимизация и валидация**
-- Кросс-валидация, выбор модели с наилучшей производительностью.
-
-**Dockerизация**
-- Упаковка пайплайна в Docker для удобства развёртывания и воспроизводимости.
----
-
-## Детали Реализации
-
-### Оценка Эмбеддингов
-- **Бенчмаркинг моделей**: Проведён анализ моделей из MTEB для выбора оптимальной по скорости и качеству.
-- **Критерии выбора**: Баланс между интерпретируемостью и точностью.
-
-### Обучение Моделей
-- **Логистическая регрессия и блендинг**: Использование смешивания моделей разной природы для повышения точности.
-- **CatBoost**: Дополнительная модель для устойчивости на несбалансированных данных.
-
-### Разметка Дополнительных Данных
-- **GPT-4o Mini API**: Разметка 25 000 записей.
-- **Фильтрация**: Использование только тех записей, где предсказания CatBoost и GPT-4o Mini совпадали.
-
-### Оптимизация Модели
-- **Эксперименты**:
-  - Дообучение линейных слоёв.
-  - TF-IDF и логистическая регрессия.
-  - блендинг линейных моделей и бустингов.
-- **Кросс-валидация**: Проверка обобщающей способности.
-- **Выбор модели**: Лучший результат на валидационном наборе.
-
-### Предобработка Текста
-- **Нормализация**: Приведение текста к нижнему регистру, удаление пунктуации.
-- **Токенизация**: Разбиение текста на токены.
-- **Удаление стоп-слов**: Исключение нерелевантных слов.
-
-### Dockerизация
-- **Контейнеризация**: Упаковка пайплайна в Docker.
-- **Воспроизводимость**: Гарантированное единообразие окружения.
+  API to provide predictions based on the model.
 
 ---
 
-## Результаты
+## Running
 
-- **Точность**: Высокая точность на валидационном наборе.
-- **Эффективность**: Низкая задержка, подходящая для реального времени.
-- **Масштабируемость**: Возможность горизонтального масштабирования.
+To run the project, a working Docker setup is required:
+
+1. Place the test file `input_file.tsv` in the root directory of the project **keeping its name**.
+
+2. To build the image and run it, use the following commands:
+    ```bash
+    docker build -t biv-hack .
+    docker run -v ${PWD}:/app biv-hack
+    ```
+
+3. During operation, the model logs events to the terminal.
+
+4. As a result, you will obtain a file in the root directory.
+
+(*) **Important Note:** If the test file changes, the image needs to be rebuilt. However, the build time will be significantly reduced due to cache usage.
 
 ---
 
-## Реализованный Дополнительный Функционал
+## Build and Launch Time
 
-- **Реализация API**: RESTful API для взаимодействия с внешними системами.
-- **Обработка мульти-язычных данных**: Поддержка нескольких языков.
+1. **First Docker Image Build:**  
+   - Takes about **10 minutes**.
+
+2. **Subsequent Rebuilds:**  
+   - Thanks to caching, the build time is reduced to **2 minutes**.
+
+3. **Inference Time:**  
+   - Processing 25,000 records with the model takes approximately **5 minutes 40 seconds**.
 
 ---
 
-## Идеи Развития
+## Solution Overview
 
-- **Автоматизация переобучения модели**: Пайплайн Airflow для актуализации модели.
-- **Пайплайн разметки данных**: Удобный процесс для ручной разметки.
-- **Использование более мощных моделей**: Интеграция GPU для трансформеров.
-- **Разработка веб-интерфейса**: Визуализация результатов и аналитика.
+Our approach includes the following key components:
+
+**Embedding Evaluation**
+- Testing models from MTEB, selecting the best in terms of accuracy and speed.
+
+**Text Preprocessing**
+- Text normalization: converting to lowercase, replacing dates and numbers with templates.
+- Calculating additional features: text readability, date differences.
+
+**CatBoost Model Training**
+- Classification using embeddings, dates, payment amounts, and generated features.
+
+**Data Labeling with GPT-4o**
+- Added 25,000 records. Only records with matching predictions from CatBoost and GPT-4o were used to enhance quality.
+
+**Blending and Metamodel**
+- Blending models (logistic regression, CatBoost) to improve accuracy and robustness.
+
+**Optimization and Validation**
+- Cross-validation, selecting the best performing model.
+
+**Dockerization**
+- Packaging the pipeline in Docker for ease of deployment and reproducibility.
+
+---
+
+## Implementation Details
+
+### Embedding Evaluation
+- **Model Benchmarking:** Analyzed models from MTEB to select the optimal ones based on speed and quality.
+- **Selection Criteria:** Balance between interpretability and accuracy.
+
+### Model Training
+- **Logistic Regression and Blending:** Using a mix of different types of models to enhance accuracy.
+- **CatBoost:** Additional model for robustness on imbalanced data.
+
+### Additional Data Labeling
+- **GPT-4o Mini API:** Labeled 25,000 records.
+- **Filtering:** Used only records where CatBoost and GPT-4o Mini predictions matched.
+
+### Model Optimization
+- **Experiments:**
+  - Fine-tuning linear layers.
+  - TF-IDF and logistic regression.
+  - Blending linear models and boosting.
+- **Cross-Validation:** Assessing generalization capability.
+- **Model Selection:** Choosing the best performing model on the validation set.
+
+### Text Preprocessing
+- **Normalization:** Converting text to lowercase, removing punctuation.
+- **Tokenization:** Splitting text into tokens.
+- **Stop-Words Removal:** Excluding irrelevant words.
+
+### Dockerization
+- **Containerization:** Packaging the pipeline in Docker.
+- **Reproducibility:** Ensuring consistent environment setup.
+
+---
+
+## Results
+
+- **Accuracy:** High accuracy on the validation set.
+- **Efficiency:** Low latency, suitable for real-time applications.
+- **Scalability:** Ability to scale horizontally.
+
+---
+
+## Implemented Additional Functionality
+
+- **API Implementation:** RESTful API for interaction with external systems.
+- **Multi-Language Data Processing:** Support for multiple languages.
+
+---
+
+## Development Ideas
+
+- **Automated Model Retraining:** Airflow pipeline for model updating.
+- **Data Labeling Pipeline:** Convenient process for manual labeling.
+- **Using More Powerful Models:** Integrating GPU support for transformers.
+- **Web Interface Development:** Visualization of results and analytics.
 
 ---
